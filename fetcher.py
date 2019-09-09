@@ -334,4 +334,4 @@ def createTree():
 if __name__ == "__main__":
     t1 = Thread(target=updateRoot).start()
     t2 = Thread(target=createTree).start()
-    app.run(host="0.0.0.0", debug=True, port=1337)
+    app.run(host="0.0.0.0", port=1337)
