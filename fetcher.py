@@ -7,6 +7,7 @@ from valghtml.templates import HTML
 from datetime import datetime
 import math
 import dateutil.parser as dp
+from threading import Thread
 
 app = Flask(__name__)
 
@@ -233,7 +234,7 @@ class Results:
         for childpath, ts in current.childrenUpdate.items():
             if timeStamp != ts:
                 Results.downloadTree(childpath, ts, sleep, depth-1)
-                #time.sleep(sleep)
+                time.sleep(sleep)
     def __str__(self):
         return f'"Name": {self.id["navn"]}, "Opptalt": {self.opptalt}, "Timestamp": {toTimeAgo(self.timestamp)}'
 
@@ -262,13 +263,75 @@ def getResults(year, type, path):
         abort(404, "Path not found: " + path)
     return HTML.html(result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
 
-if __name__ == "__main__":
-    app.run()
+@app.route('/best/<int:year>/<string:type>')
+def getBest(year, type):
+    path = "/{year}/{type}".format(year=year, type=type)
+    bestfylke = []
+    bestkommune = []
+    for (resultpath, result) in resultDict.items():
+        if not resultpath.startswith(path):
+            continue
+        mdg = None
+        try:
+            for parti in result.partier:
+                if parti["id"]["partikode"] == "MDG":
+                    mdg = parti
+        except:
+            pass
+        if mdg:
+            try:
+                pp = mdg["stemmer"]["resultat"]["prosent"]
+                endring = mdg["stemmer"]["resultat"]["endring"]["samme"]
+                print(pp)
+                print(endring)
+                try:
+                    pp = mdg["stemmer"]["prognose"]["prosent"]
+                    endring = mdg["stemmer"]["prognose"]["endring"]["samme"]
+                except:
+                    pass
+                if result.id["nivaa"] == "fylke":
+                    bestfylke.append(['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
+                                pp, endring])
+                if result.id["nivaa"] == "kommune":
+                    bestkommune.append(['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
+                                pp, endring])
+            except:
+                pass
+    bestkommuneabsolutt = sorted(bestkommune, key=lambda x:x[1], reverse=True)[0:40]
+    bestkommuneendring = sorted(bestkommune, key=lambda x:x[2], reverse=True)[0:40]
+    bestfylkeabsolutt = sorted(bestfylke, key=lambda x:x[1], reverse=True)[0:20]
+    bestfylkeendring = sorted(bestfylke, key=lambda x:x[2], reverse=True)[0:20]
+    return HTML.html(createTable("Beste kommuner",["navn", "oppslutning", "endring"], bestkommuneabsolutt)+
+                     createTable("Best endring kommuner",["navn", "oppslutning", "endring"], bestkommuneendring),
+                     createTable("Beste fylker",["navn", "oppslutning", "endring"], bestfylkeabsolutt) +
+                     createTable("Best endring fylker", ["navn", "oppslutning", "endring"], bestfylkeendring)
+                     )
 
-#Results.downloadResult("/2019/ko")
-#Results.downloadTree("/2019/ko", depth=1)
-#oslo = Results.fetchNewest("/2015/ko/03")
-#print(oslo.resultater())
-#print(Results.fetchNewest("/2019/ko/03"))
-#print(Results.fetchNewest("/2019/ko/11/1101"))
-#print(Results.fetchNewest("/2019/ko/11/1101"))
+def createTable(title, headers, elements):
+    for x in elements:
+        print(x)
+    return '''
+    <table border="1" style="float: left">
+    <tr><th colspan="{n}">{title}</th></tr>
+    <tr><th>{headerlist}</th></tr>
+    <tr><td>{elementlist}</td></tr></table>
+    '''.format(n=len(headers), title=title,
+               headerlist="</th><th>".join(headers),
+               elementlist="</td></tr><tr><td>".join(
+                   ["</td><td>".join([str(y) for y in x]) for x in elements]
+               ))
+
+def updateRoot():
+    while True:
+        Results.downloadResult("/2015/ko")
+        Results.downloadResult("/2019/fy")
+        time.sleep(5)
+
+def createTree():
+    Results.downloadTree("/2015/ko", depth=3)
+    Results.downloadTree("/2019/fy", depth=2)
+
+if __name__ == "__main__":
+    t1 = Thread(target=updateRoot).start()
+    t2 = Thread(target=createTree).start()
+    app.run(host="0.0.0.0", debug=True, port=1337)
