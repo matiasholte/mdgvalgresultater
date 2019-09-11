@@ -222,7 +222,7 @@ class Results:
         return resultDict[path]
 
     @staticmethod
-    def downloadTree(path, timeStamp=None, sleep=0.1, depth=3):
+    def downloadTree(path, timeStamp=None, sleep=0.5, depth=3):
         if depth == 0:
             return
         current = None
@@ -253,7 +253,7 @@ def getSummary(year, type):
     result = Results.fetchNewest(path)
     if not result:
         abort(404, "Path not found: " + path)
-    return HTML.html(result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
+    return HTML.html("Opptalt: " + str(result.opptalt) + result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
 
 @app.route('/results/<int:year>/<string:type>/<path:path>')
 def getResults(year, type, path):
@@ -261,13 +261,15 @@ def getResults(year, type, path):
     result = Results.fetchNewest(path)
     if not result:
         abort(404, "Path not found: " + path)
-    return HTML.html(result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
+    return HTML.html("Opptalt: " + str(result.opptalt) + result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
 
 @app.route('/best/<int:year>/<string:type>')
 def getBest(year, type):
     path = "/{year}/{type}".format(year=year, type=type)
     bestfylke = []
     bestkommune = []
+    bestbydel = []
+    bestall = []
     for (resultpath, result) in resultDict.items():
         if not resultpath.startswith(path):
             continue
@@ -282,34 +284,49 @@ def getBest(year, type):
             try:
                 pp = mdg["stemmer"]["resultat"]["prosent"]
                 endring = mdg["stemmer"]["resultat"]["endring"]["samme"]
-                print(pp)
-                print(endring)
                 try:
                     pp = mdg["stemmer"]["prognose"]["prosent"]
                     endring = mdg["stemmer"]["prognose"]["endring"]["samme"]
                 except:
                     pass
+                if not pp:
+                    continue
+                if not endring:
+                    endring = -100
                 if result.id["nivaa"] == "fylke":
                     bestfylke.append(['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
                                 pp, endring])
                 if result.id["nivaa"] == "kommune":
                     bestkommune.append(['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
                                 pp, endring])
+                if result.id["nivaa"] == "bydel":
+                    bestbydel.append(
+                        ['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
+                         pp, endring])
+                bestall.append(
+                        ['<a href="/results{url}">{name}</a>'.format(url=result.link, name=result.id["navn"]),
+                         pp, endring])
             except:
                 pass
     bestkommuneabsolutt = sorted(bestkommune, key=lambda x:x[1], reverse=True)[0:40]
     bestkommuneendring = sorted(bestkommune, key=lambda x:x[2], reverse=True)[0:40]
     bestfylkeabsolutt = sorted(bestfylke, key=lambda x:x[1], reverse=True)[0:20]
     bestfylkeendring = sorted(bestfylke, key=lambda x:x[2], reverse=True)[0:20]
+    bestbydelabsolutt = sorted(bestbydel, key=lambda x:x[1], reverse=True)[0:20]
+    bestbydelendring = sorted(bestbydel, key=lambda x:x[2], reverse=True)[0:20]
+    bestallabsolutt = sorted(bestall, key=lambda x:x[1], reverse=True)
+    bestallendring = sorted(bestall, key=lambda x:x[2], reverse=True)
     return HTML.html(createTable("Beste kommuner",["navn", "oppslutning", "endring"], bestkommuneabsolutt)+
                      createTable("Best endring kommuner",["navn", "oppslutning", "endring"], bestkommuneendring),
                      createTable("Beste fylker",["navn", "oppslutning", "endring"], bestfylkeabsolutt) +
-                     createTable("Best endring fylker", ["navn", "oppslutning", "endring"], bestfylkeendring)
+                     createTable("Best endring fylker", ["navn", "oppslutning", "endring"], bestfylkeendring) +
+                     createTable("Beste bydeler", ["navn", "oppslutning", "endring"], bestbydelabsolutt) +
+                     createTable("Best endring bydeler", ["navn", "oppslutning", "endring"], bestbydelendring)+
+                     createTable("Beste totalt", ["navn", "oppslutning", "endring"], bestallabsolutt) +
+                     createTable("Best endring totalt", ["navn", "oppslutning", "endring"], bestallendring)
                      )
 
 def createTable(title, headers, elements):
-    for x in elements:
-        print(x)
     return '''
     <table border="1" style="float: left">
     <tr><th colspan="{n}">{title}</th></tr>
@@ -321,15 +338,32 @@ def createTable(title, headers, elements):
                    ["</td><td>".join([str(y) for y in x]) for x in elements]
                ))
 
+@app.route("/matias")
+def matiasLinks():
+    codes = ["11", "11/1106", "11/1149", "11/1109", "11/1103", "54", "54/5401", "54/5405",
+             "18", "18/1804", "18/1871", "18/1833", "18/1870"]
+    links = ""
+    for code in codes:
+        try:
+            result = Results.fetchNewest("/2019/ko/" + code)
+            links+=(result.makeLink(result.rawLinks["self"]))
+        except:
+            pass
+    return "<table>"+links+"</table>"
+
 def updateRoot():
     while True:
         Results.downloadResult("/2019/ko")
         Results.downloadResult("/2019/fy")
-        time.sleep(5)
+        time.sleep(50)
 
 def createTree():
-    Results.downloadTree("/2019/ko", depth=3)
-    Results.downloadTree("/2019/fy", depth=2)
+    while True:
+        Results.downloadTree("/2019/ko", depth=5, sleep=0)
+        Results.downloadTree("/2019/fy", depth=2)
+        #Results.downloadTree("/2015/ko", depth=2)
+        #Results.downloadTree("/2015/fy", depth=2)
+        time.sleep(5)
 
 if __name__ == "__main__":
     t1 = Thread(target=updateRoot).start()
