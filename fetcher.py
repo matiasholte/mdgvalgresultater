@@ -200,14 +200,21 @@ class Results:
         '''.format(rows = "".join([Results.resultatRadHTML(liste, parti) for parti in partier]))
 
     @staticmethod
+    def round(number):
+        try:
+            return round(number, 2)
+        except:
+            return number
+
+    @staticmethod
     def resultatRadHTML(liste, kode):
         return '''
         <tr>
         <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td><td>{mandater}</td><td>{mendring}</td><td>{stemmer}
         </td><td>{neste}</td><td>{siste}</td>
         <tr>
-        '''.format(farge=Results.farge(kode), kode=kode, resultat=round(liste["Oppslutning %"][kode],2), rendring=round(liste["Endring %"][kode],2),
-                   prognose=round(liste["Prognose %"][kode],2),pendring=round(liste["Prognose endring %"][kode],2),
+        '''.format(farge=Results.farge(kode), kode=kode, resultat=Results.round(liste["Oppslutning %"][kode]), rendring=Results.round(liste["Endring %"][kode]),
+                   prognose=Results.round(liste["Prognose %"][kode]),pendring=Results.round(liste["Prognose endring %"][kode]),
                    mandater=liste["Mandater"][kode], mendring=liste["Mandater endring"][kode],
                    stemmer=liste["Stemmeantall"][kode], neste=liste["Stemmer for neste mandat"][kode], siste=liste["Stemmer for siste mandat"][kode])
 
@@ -351,15 +358,21 @@ def matiasLinks():
             pass
     return "<table>"+links+"</table>"
 
+@app.route("/")
+def getRoot():
+    return getSummary(2021, "st")
+
 def updateRoot():
     while True:
+        Results.downloadResult("/2017/st")
         Results.downloadResult("/2019/ko")
         Results.downloadResult("/2019/fy")
+        Results.downloadResult("/2021/st")
         time.sleep(50)
 
 def createTree():
     while True:
-        Results.downloadTree("/2019/ko", depth=5, sleep=0)
+        Results.downloadTree("/2019/ko", depth=2, sleep=0)
         Results.downloadTree("/2019/fy", depth=2)
         #Results.downloadTree("/2015/ko", depth=2)
         #Results.downloadTree("/2015/fy", depth=2)
