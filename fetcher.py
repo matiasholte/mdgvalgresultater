@@ -76,15 +76,18 @@ class Results:
         ppendring = {}
         prognoseabsolutt = {}
         prognoseendring = {}
+        ppprognoseEllerOpptalt = {}
+        underSperregrensa = {}
         mabsolutt = {}
         mendring = {}
+        utjevning = {}
         stemmeantall = {}
         nesteMandat = {}
         sisteMandat = {}
         nesteStemmer = {}
         sisteStemmer = {}
-        globalSisteMandat = 0
-        globalNesteMandat = 0
+        globalSisteKvotient = 10000000
+        globalNesteKvotient = 0
         for parti in self.partier:
             kategori = parti["id"]["partikategori"]
             kode = parti["id"]["partikode"]
@@ -93,11 +96,14 @@ class Results:
             if kategori != 1 and prosentresultat < 1:
                 continue
             ppabsolutt[kode] = prosentresultat
+            ppprognoseEllerOpptalt[kode] = prosentresultat
             ppendring[kode] = resultat["endring"]["samme"] or 0
             prognoseendring[kode] = prognoseabsolutt[kode] = mabsolutt[kode] = mendring[kode] = -1
             if self.prognose["beregnet"]:
                 prognoseabsolutt[kode] = parti["stemmer"]["prognose"]["prosent"]
+                ppprognoseEllerOpptalt[kode] = prognoseabsolutt[kode]
                 prognoseendring[kode] = parti["stemmer"]["prognose"]["endring"]["samme"]
+            underSperregrensa[kode] = self.mandater == 169 and (ppprognoseEllerOpptalt[kode] < 4 or kode=="Andre")
             stemmeantall[kode] = resultat["antall"]["total"]
             mandater = None
             try:
@@ -105,24 +111,31 @@ class Results:
             except KeyError:
                 pass
             if mandater:
+                utjevning[kode] = mandater["utjevningAntall"]
                 mabsolutt[kode] = mandater["antall"]
+                direktemandater = mabsolutt[kode]
+                if self.mandater != 169:
+                    direktemandater -= utjevning[kode]
                 mendring[kode] = mandater["endring"]
                 try:
-                    siste = mandater["sisteMandat"]
+                    if not underSperregrensa[kode]:
+                        globalNesteKvotient = max(globalNesteKvotient, stemmeantall[kode]/max(1.4, direktemandater*2+1))
+                        if mabsolutt[kode] > 0:
+                            globalSisteKvotient = min(globalSisteKvotient, stemmeantall[kode]/max(1.4, direktemandater*2-1))
                     neste = mandater["nesteMandat"]
-                    if siste["mandatrang"] == self.mandater:
-                        globalSisteMandat = stemmeantall[kode]/max(1.4, mabsolutt[kode]*2-1.)
-                    if neste["mandatrang"] == self.mandater+1:
-                        globalNesteMandat = stemmeantall[kode]/max(1.4, mabsolutt[kode]*2+1.)
+                    siste = mandater["sisteMandat"]
                     nesteMandat[kode] = neste
                     sisteMandat[kode] = siste
                 except KeyError:
                     pass
         for kode, antall in mabsolutt.items():
-            nesteStemmer[kode] = math.ceil(globalSisteMandat*max(1.4, antall*2+1.)-stemmeantall[kode])
+            if underSperregrensa[kode]:
+                nesteStemmer[kode] = math.ceil(stemmeantall[kode]/ppprognoseEllerOpptalt[kode]*4-stemmeantall[kode])
+            else:
+                nesteStemmer[kode] = math.ceil(globalSisteKvotient*max(1.4, antall*2+1.)-stemmeantall[kode])
             sisteStemmer[kode] = -1
-            if antall > 0:
-                sisteStemmer[kode] = -math.ceil(globalNesteMandat*max(1.4, antall*2-1.)-stemmeantall[kode])
+            if antall > 0 and not underSperregrensa[kode]:
+                sisteStemmer[kode] = -math.ceil(globalNesteKvotient*max(1.4, antall*2-1.)-stemmeantall[kode])
         return {
             "Oppslutning %": ppabsolutt,
             "Endring %": ppendring,
@@ -131,13 +144,15 @@ class Results:
             "Mandater totalt": self.mandater,
             "Mandater": mabsolutt,
             "Mandater endring": mendring,
+            "Utjevning": utjevning,
             "Opptalt": self.opptalt,
             "Stemmeantall": stemmeantall,
             "Stemmer for neste mandat": nesteStemmer,
             "Stemmer for siste mandat": sisteStemmer,
-            "sisteKvotient": globalSisteMandat,
-            "nesteKvotient": globalNesteMandat
+            "sisteKvotient": globalSisteKvotient,
+            "nesteKvotient": globalNesteKvotient
         }
+
     def getLink(self):
         return '''
         <table border="1" style="float: left">
@@ -208,6 +223,9 @@ class Results:
 
     @staticmethod
     def resultatRadHTML(liste, kode):
+        utjevning = ""
+        if liste["Utjevning"][kode] > 0:
+            utjevning = " (u: %d)" % liste["Utjevning"][kode]
         return '''
         <tr>
         <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td><td>{mandater}</td><td>{mendring}</td><td>{stemmer}
@@ -215,7 +233,7 @@ class Results:
         <tr>
         '''.format(farge=Results.farge(kode), kode=kode, resultat=Results.round(liste["Oppslutning %"][kode]), rendring=Results.round(liste["Endring %"][kode]),
                    prognose=Results.round(liste["Prognose %"][kode]),pendring=Results.round(liste["Prognose endring %"][kode]),
-                   mandater=liste["Mandater"][kode], mendring=liste["Mandater endring"][kode],
+                   mandater=str(liste["Mandater"][kode])+utjevning, mendring=liste["Mandater endring"][kode],
                    stemmer=liste["Stemmeantall"][kode], neste=liste["Stemmer for neste mandat"][kode], siste=liste["Stemmer for siste mandat"][kode])
 
 
