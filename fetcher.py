@@ -106,7 +106,7 @@ class Results:
                 prognoseabsolutt[kode] = parti["stemmer"]["prognose"]["prosent"]
                 ppprognoseEllerOpptalt[kode] = prognoseabsolutt[kode] or 0
                 prognoseendring[kode] = parti["stemmer"]["prognose"]["endring"]["samme"]
-            underSperregrensa[kode] = self.mandater == 169 and (ppprognoseEllerOpptalt[kode] < 4 or kode=="Andre")
+            underSperregrensa[kode] = self.mandater == 169 and (ppprognoseEllerOpptalt[kode] < 4)
             stemmeantall[kode] = resultat["antall"]["total"]
             mandater = None
             try:
@@ -122,7 +122,7 @@ class Results:
                     direktemandater[kode] -= utjevning[kode]
                 mendring[kode] = mandater["endring"]
                 try:
-                    if not underSperregrensa[kode]:
+                    if kode != "Andre" and not underSperregrensa[kode]:
                         globalNesteKvotient = max(globalNesteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2+1))
                         if mabsolutt[kode] > 0:
                             globalSisteKvotient = min(globalSisteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2-1))
@@ -212,14 +212,18 @@ class Results:
     def resultatTabellHTML(self, liste):
         d=liste["Stemmeantall"]
         partier = [k for k in sorted(d, key=d.get, reverse=True)]
+        harmandater = self.mandater > 0
+        mandatheader = "<th>Mandater</th><th>Endring</th>" if harmandater else ""
+        kapreheader = "<th>Kapre mandat</th><th>Miste mandat</th>" if harmandater else ""
         return '''
         <table border="1" style="float: left">
         <tr>
-        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th><th>Mandater</th><th>Endring</th><th>Stemmer</th><th>Kapre mandat</th><th>Miste mandat</th>
+        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th>{mandatheader}<th>Stemmer</th>{kapreheader}
         </tr>
         {rows}
         </table>
-        '''.format(rows = "".join([Results.resultatRadHTML(liste, parti) for parti in partier]))
+        '''.format(mandatheader = mandatheader, kapreheader = kapreheader,
+                   rows = "".join([Results.resultatRadHTML(liste, parti, harmandater) for parti in partier]))
 
     @staticmethod
     def round(number):
@@ -229,14 +233,14 @@ class Results:
             return number
 
     @staticmethod
-    def resultatRadHTML(liste, kode):
+    def resultatRadHTML(liste, kode, harmandater):
         utjevning = ""
         if liste["Utjevning"][kode] > 0:
             utjevning = " (u: %d)" % liste["Utjevning"][kode]
         return '''
         <tr>
-        <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td><td>{mandater}</td><td>{mendring}</td><td>{stemmer}
-        </td><td>{neste}</td><td>{siste}</td>
+        <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td>{mandater}<td>{stemmer}
+        {nestesiste}
         <tr>
         '''.format(farge=Results.farge(kode),
                    kode=kode,
@@ -244,11 +248,9 @@ class Results:
                    rendring=Results.round(liste["Endring %"][kode]),
                    prognose=Results.round(liste["Prognose %"][kode]),
                    pendring=Results.round(liste["Prognose endring %"][kode]),
-                   mandater=str(liste["Mandater"][kode])+utjevning,
-                   mendring=liste["Mandater endring"][kode],
+                   mandater = "<td>%s</td><td>%s</td>" % (str(liste["Mandater"][kode]) + utjevning,liste["Mandater endring"][kode]) if harmandater else "",
                    stemmer=liste["Stemmeantall"][kode],
-                   neste=liste["Stemmer for neste mandat"][kode],
-                   siste=liste["Stemmer for siste mandat"][kode])
+                   nestesiste = "<td>%s</td><td>%s</td>" % (liste["Stemmer for neste mandat"][kode], liste["Stemmer for siste mandat"][kode]) if harmandater else "")
 
 
     @staticmethod
