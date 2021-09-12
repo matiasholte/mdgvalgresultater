@@ -88,6 +88,7 @@ class Results:
         sisteMandat = {}
         nesteStemmer = {}
         sisteStemmer = {}
+        harPersoner = False
         sperregrense = math.ceil(self.stemmer["total"]/25)
         globalSisteKvotient = 10000000
         globalNesteKvotient = 0
@@ -121,15 +122,22 @@ class Results:
                 if self.mandater != 169:
                     direktemandater[kode] -= utjevning[kode]
                 mendring[kode] = mandater["endring"]
+                if kode != "Andre" and not underSperregrensa[kode] and direktemandater[kode] > 0:
+                    globalNesteKvotient = max(globalNesteKvotient, stemmeantall[kode] / max(1.4, direktemandater[kode] * 2 + 1))
+                    globalSisteKvotient = min(globalSisteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2-1))
+                nesteMandat[kode] = sisteMandat[kode] = ""
                 try:
-                    if kode != "Andre" and not underSperregrensa[kode]:
-                        globalNesteKvotient = max(globalNesteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2+1))
-                        if mabsolutt[kode] > 0:
-                            globalSisteKvotient = min(globalSisteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2-1))
-                    neste = mandater["nesteMandat"]
-                    siste = mandater["sisteMandat"]
-                    nesteMandat[kode] = neste
-                    sisteMandat[kode] = siste
+                    if len(mandater["nesteKandidater"])>0:
+                        nesteMandat[kode] = mandater["nesteKandidater"][0]["navn"]
+                        harPersoner = True
+                except KeyError:
+                    pass
+                try:
+                    if len(mandater["representanter"])>0:
+                        sisteMandat[kode] = mandater["representanter"][-1]["navn"]
+                        harPersoner = True
+                        if mandater["representanter"][-1]["utjevningsmandat"]:
+                            sisteMandat[kode] += " (u)"
                 except KeyError:
                     pass
         for kode, antall in direktemandater.items():
@@ -156,8 +164,11 @@ class Results:
             "Stemmeantall": stemmeantall,
             "Stemmer for neste mandat": nesteStemmer,
             "Stemmer for siste mandat": sisteStemmer,
+            "Sistemandat": sisteMandat,
+            "Nestemandat": nesteMandat,
             "sisteKvotient": globalSisteKvotient,
-            "nesteKvotient": globalNesteKvotient
+            "nesteKvotient": globalNesteKvotient,
+            "harPersoner" : harPersoner
         }
 
     def getLink(self):
@@ -215,15 +226,16 @@ class Results:
         harmandater = self.mandater > 0
         mandatheader = "<th>Mandater</th><th>Endring</th>" if harmandater else ""
         kapreheader = "<th>Kapre mandat</th><th>Miste mandat</th>" if harmandater else ""
+        personheader = "<th>Siste mandat</th><th>Neste mandat</th>" if liste["harPersoner"] else ""
         return '''
         <table border="1" style="float: left">
         <tr>
-        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th>{mandatheader}<th>Stemmer</th>{kapreheader}
+        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th>{mandatheader}<th>Stemmer</th>{kapreheader}{personheader}
         </tr>
         {rows}
         </table>
-        '''.format(mandatheader = mandatheader, kapreheader = kapreheader,
-                   rows = "".join([Results.resultatRadHTML(liste, parti, harmandater) for parti in partier]))
+        '''.format(mandatheader = mandatheader, kapreheader = kapreheader, personheader = personheader,
+                   rows = "".join([Results.resultatRadHTML(liste, parti, harmandater, liste["harPersoner"]) for parti in partier]))
 
     @staticmethod
     def round(number):
@@ -233,14 +245,14 @@ class Results:
             return number
 
     @staticmethod
-    def resultatRadHTML(liste, kode, harmandater):
+    def resultatRadHTML(liste, kode, harmandater, harpersoner):
         utjevning = ""
         if liste["Utjevning"][kode] > 0:
             utjevning = " (u: %d)" % liste["Utjevning"][kode]
         return '''
         <tr>
         <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td>{mandater}<td>{stemmer}
-        {nestesiste}
+        {nestesiste}{nestesisteperson}
         <tr>
         '''.format(farge=Results.farge(kode),
                    kode=kode,
@@ -250,7 +262,10 @@ class Results:
                    pendring=Results.round(liste["Prognose endring %"][kode]),
                    mandater = "<td>%s</td><td>%s</td>" % (str(liste["Mandater"][kode]) + utjevning,liste["Mandater endring"][kode]) if harmandater else "",
                    stemmer=liste["Stemmeantall"][kode],
-                   nestesiste = "<td>%s</td><td>%s</td>" % (liste["Stemmer for neste mandat"][kode], liste["Stemmer for siste mandat"][kode]) if harmandater else "")
+                   nestesiste = "<td>%s</td><td>%s</td>" % (liste["Stemmer for neste mandat"][kode], liste["Stemmer for siste mandat"][kode]) if harmandater else "",
+                   nestesisteperson = "<td>%s</td><td>%s</td>" % (
+                       liste["Sistemandat"][kode], liste["Nestemandat"][kode]
+                   ) if harpersoner else "")
 
 
     @staticmethod
@@ -294,7 +309,8 @@ def getSummary(year, type):
     result = Results.fetchNewest(path)
     if not result:
         abort(404, "Path not found: " + path)
-    return HTML.html("Opptalt: " + str(result.opptalt) + result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
+    return HTML.html("Opptalt: " + str(result.opptalt) + " Antall stemmer: " +  str(result.stemmer) + result.getLink(),
+                     str(result.resultatTabellHTML(result.resultatListe())))
 
 @app.route('/results/<int:year>/<string:type>/<path:path>')
 def getResults(year, type, path):
