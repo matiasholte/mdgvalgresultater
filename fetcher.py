@@ -73,6 +73,7 @@ class Results:
         return self.partier
 
     def resultatListe(self):
+        opptalt = {}
         ppabsolutt = {}
         ppendring = {}
         prognoseabsolutt = {}
@@ -99,6 +100,7 @@ class Results:
             prosentresultat = resultat["prosent"] or -1
             if kategori != 1 and prosentresultat < 1:
                 continue
+            opptalt[kode] = self.opptalt["forelopig"]
             ppabsolutt[kode] = prosentresultat
             ppprognoseEllerOpptalt[kode] = prosentresultat or 0
             ppendring[kode] = resultat["endring"]["samme"] or 0
@@ -168,7 +170,8 @@ class Results:
             "Nestemandat": nesteMandat,
             "sisteKvotient": globalSisteKvotient,
             "nesteKvotient": globalNesteKvotient,
-            "harPersoner" : harPersoner
+            "harPersoner" : harPersoner,
+            "opptalt": opptalt
         }
 
     def getLink(self):
@@ -210,7 +213,7 @@ class Results:
             return "CC9900"
         if kode=="KRF":
             return "FFFF00"
-        if kode=="MDG":
+        if kode.startswith("MDG"):
             return "00FF00"
         if kode=="V":
             return "00CCCC"
@@ -230,7 +233,7 @@ class Results:
         return '''
         <table border="1" style="float: left">
         <tr>
-        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th>{mandatheader}<th>Stemmer</th>{kapreheader}{personheader}
+        <th>Parti</th><th>Resultat</th><th>Endring</th><th>Prognose</th><th>Endring</th><th>Opptalt</th>{mandatheader}<th>Stemmer</th>{kapreheader}{personheader}
         </tr>
         {rows}
         </table>
@@ -240,7 +243,7 @@ class Results:
     @staticmethod
     def round(number):
         try:
-            return round(number, 2)
+            return round(number, 3)
         except:
             return number
 
@@ -251,7 +254,7 @@ class Results:
             utjevning = " (u: %d)" % liste["Utjevning"][kode]
         return '''
         <tr>
-        <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td>{mandater}<td>{stemmer}
+        <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td><td>{opptalt}</td>{mandater}<td>{stemmer}
         {nestesiste}{nestesisteperson}
         <tr>
         '''.format(farge=Results.farge(kode),
@@ -260,6 +263,7 @@ class Results:
                    rendring=Results.round(liste["Endring %"][kode]),
                    prognose=Results.round(liste["Prognose %"][kode]),
                    pendring=Results.round(liste["Prognose endring %"][kode]),
+                   opptalt=Results.round(liste["opptalt"][kode]),
                    mandater = "<td>%s</td><td>%s</td>" % (str(liste["Mandater"][kode]) + utjevning,liste["Mandater endring"][kode]) if harmandater else "",
                    stemmer=liste["Stemmeantall"][kode],
                    nestesiste = "<td>%s</td><td>%s</td>" % (liste["Stemmer for neste mandat"][kode], liste["Stemmer for siste mandat"][kode]) if harmandater else "",
@@ -309,8 +313,37 @@ def getSummary(year, type):
     result = Results.fetchNewest(path)
     if not result:
         abort(404, "Path not found: " + path)
-    return HTML.html("Opptalt: " + str(result.opptalt) + " Antall stemmer: " +  str(result.stemmer) + result.getLink(),
-                     str(result.resultatTabellHTML(result.resultatListe())))
+    resultliste = result.resultatListe()
+    mdgliste = {}
+    for fylke in result.children:
+        fylkeresult = Results.fetchNewest(fylke["href"]).resultatListe()
+        nykode = "MDG "+str(fylke["navn"])
+        if fylkeresult["harPersoner"] != True:
+            continue
+        mdgliste["harPersoner"] = True
+        for key, value in fylkeresult.items():
+            if isinstance(value, dict):
+                if not key in mdgliste:
+                    mdgliste[key] = {}
+                for parti, verdi in value.items():
+                    if parti == 'MDG':
+                        mdgliste[key][nykode] = verdi
+
+    return HTML.html("Opptalt: " + str(result.opptalt) + " Antall stemmer: " + str(result.stemmer) + result.getLink(),
+                     str(result.resultatTabellHTML(resultliste)) +
+                     (str(result.resultatTabellHTML(mdgliste)) if mdgliste else "") +
+                     koalisjonsTabell(resultliste["Mandater"]))
+
+def koalisjonsTabell(mandater):
+    return createTable("Koalisjoner",["partier", "mandater"],
+                         [koalisjonsRad(("A", "SV", "SP"), mandater),
+                          koalisjonsRad(("MDG", "A", "SV", "RØDT"), mandater)])
+def koalisjonsRad(partier, mandater):
+    try:
+        return [",".join(partier), sum(mandater[parti] for parti in partier)]
+    except KeyError:
+        return ["",""]
+
 
 @app.route('/results/<int:year>/<string:type>/<path:path>')
 def getResults(year, type, path):
@@ -318,7 +351,8 @@ def getResults(year, type, path):
     result = Results.fetchNewest(path)
     if not result:
         abort(404, "Path not found: " + path)
-    return HTML.html("Opptalt: " + str(result.opptalt) + result.getLink(), str(result.resultatTabellHTML(result.resultatListe())))
+    return HTML.html("Opptalt: " + str(result.opptalt) + " Antall stemmer: " +  str(result.stemmer) + result.getLink(),
+                     str(result.resultatTabellHTML(result.resultatListe())))
 
 @app.route('/best/<int:year>/<string:type>')
 def getBest(year, type):
