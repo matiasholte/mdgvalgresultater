@@ -93,6 +93,8 @@ class Results:
         sperregrense = math.ceil(self.stemmer["total"]/25)
         globalSisteKvotient = 10000000
         globalNesteKvotient = 0
+
+        prognose = self.prognose["beregnet"]
         for parti in self.partier:
             kategori = parti["id"]["partikategori"]
             kode = parti["id"]["partikode"]
@@ -105,7 +107,7 @@ class Results:
             ppprognoseEllerOpptalt[kode] = prosentresultat or 0
             ppendring[kode] = resultat["endring"]["samme"] or 0
             prognoseendring[kode] = prognoseabsolutt[kode] = mabsolutt[kode] = mendring[kode] = direktemandater[kode] = -1
-            if self.prognose["beregnet"]:
+            if prognose:
                 prognoseabsolutt[kode] = parti["stemmer"]["prognose"]["prosent"]
                 ppprognoseEllerOpptalt[kode] = prognoseabsolutt[kode] or 0
                 prognoseendring[kode] = parti["stemmer"]["prognose"]["endring"]["samme"]
@@ -113,7 +115,10 @@ class Results:
             stemmeantall[kode] = resultat["antall"]["total"]
             mandater = None
             try:
-                mandater = parti["mandater"]["resultat"]
+                if prognose:
+                    mandater = parti["mandater"]["prognose"]
+                else:
+                    mandater = parti["mandater"]["resultat"]
             except KeyError:
                 pass
             utjevning[kode] = 0
@@ -124,9 +129,14 @@ class Results:
                 if self.mandater != 169:
                     direktemandater[kode] -= utjevning[kode]
                 mendring[kode] = mandater["endring"]
+
+                grunnlag = stemmeantall[kode]
+                if prognose:
+                    grunnlag = ppprognoseEllerOpptalt[kode]
+
                 if kode != "Andre" and not underSperregrensa[kode] and direktemandater[kode] > 0:
-                    globalNesteKvotient = max(globalNesteKvotient, stemmeantall[kode] / max(1.4, direktemandater[kode] * 2 + 1))
-                    globalSisteKvotient = min(globalSisteKvotient, stemmeantall[kode]/max(1.4, direktemandater[kode]*2-1))
+                    globalNesteKvotient = max(globalNesteKvotient, grunnlag / max(1.4, direktemandater[kode] * 2 + 1))
+                    globalSisteKvotient = min(globalSisteKvotient, grunnlag / max(1.4, direktemandater[kode] * 2 - 1))
                 nesteMandat[kode] = sisteMandat[kode] = ""
                 try:
                     if len(mandater["nesteKandidater"])>0:
@@ -145,14 +155,24 @@ class Results:
         for kode, antall in direktemandater.items():
             if underSperregrensa[kode]:
                 if stemmeantall[kode] == 0:
-                    nesteStemmer[kode] = sperregrense
+                    nesteStemmer[kode] = (4, sperregrense)
                 else:
-                    nesteStemmer[kode] = math.ceil(stemmeantall[kode]/ppprognoseEllerOpptalt[kode]*4-stemmeantall[kode])
+                    nesteStemmer[kode] = (4-ppprognoseEllerOpptalt[kode], stemmeantall[kode]/ppprognoseEllerOpptalt[kode]*4-stemmeantall[kode])
             else:
-                nesteStemmer[kode] = math.ceil(globalSisteKvotient*max(1.4, antall*2+1.)-stemmeantall[kode])
-            sisteStemmer[kode] = -1
+                if prognose:
+                    x = globalSisteKvotient*max(1.4, antall*2+1.)-ppprognoseEllerOpptalt[kode]
+                    nesteStemmer[kode] = (x, x*self.stemmer["total"]/100)
+                else:
+                    x = globalSisteKvotient * max(1.4, antall * 2 + 1.) - stemmeantall[kode]
+                    nesteStemmer[kode] = (x/self.stemmer["total"]*100, x)
+            sisteStemmer[kode] = (-1, -1)
             if antall > 0 and not underSperregrensa[kode]:
-                sisteStemmer[kode] = -math.ceil(globalNesteKvotient*max(1.4, antall*2-1.)-stemmeantall[kode])
+                if prognose:
+                    x = -(globalNesteKvotient*max(1.4, antall*2-1.)-ppprognoseEllerOpptalt[kode])
+                    sisteStemmer[kode] = (x, x*self.stemmer["total"]/100)
+                else:
+                    x = -(globalNesteKvotient*max(1.4, antall*2-1.) - stemmeantall[kode])
+                    sisteStemmer[kode] = (x/self.stemmer["total"]*100, x)
         return {
             "Oppslutning %": ppabsolutt,
             "Endring %": ppendring,
@@ -252,6 +272,10 @@ class Results:
         utjevning = ""
         if liste["Utjevning"][kode] > 0:
             utjevning = " (u: %d)" % liste["Utjevning"][kode]
+        pp, abs = liste["Stemmer for neste mandat"][kode]
+        neste = "(%s, %d)" % (Results.round(pp), math.ceil(abs))
+        pp, abs = liste["Stemmer for siste mandat"][kode]
+        siste = "(%s, %d)" % (Results.round(pp), math.ceil(abs))
         return '''
         <tr>
         <td bgColor="#{farge}">{kode}</td><td>{resultat}</td><td>{rendring}</td><td>{prognose}</td><td>{pendring}</td><td>{opptalt}</td>{mandater}<td>{stemmer}
@@ -266,7 +290,7 @@ class Results:
                    opptalt=Results.round(liste["opptalt"][kode]),
                    mandater = "<td>%s</td><td>%s</td>" % (str(liste["Mandater"][kode]) + utjevning,liste["Mandater endring"][kode]) if harmandater else "",
                    stemmer=liste["Stemmeantall"][kode],
-                   nestesiste = "<td>%s</td><td>%s</td>" % (liste["Stemmer for neste mandat"][kode], liste["Stemmer for siste mandat"][kode]) if harmandater else "",
+                   nestesiste = "<td>%s</td><td>%s</td>" % (neste, siste) if harmandater else "",
                    nestesisteperson = "<td>%s</td><td>%s</td>" % (
                        liste["Sistemandat"][kode], liste["Nestemandat"][kode]
                    ) if harpersoner else "")
