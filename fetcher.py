@@ -8,6 +8,7 @@ from datetime import datetime
 import math
 import dateutil.parser as dp
 from threading import Thread
+import argparse
 
 app = Flask(__name__)
 
@@ -167,7 +168,7 @@ class Results:
                     nesteStemmer[kode] = (x, x*ikkeblanke/100)
                 else:
                     x = globalSisteKvotient * max(1.4, antall * 2 + 1.) - stemmeantall[kode]
-                    nesteStemmer[kode] = (x/ikkeblanke*100, x)
+                    nesteStemmer[kode] = (x/max(1,ikkeblanke)*100, x)
             sisteStemmer[kode] = (-1, -1)
             if antall > 0 and not underSperregrensa[kode]:
                 if prognose:
@@ -175,7 +176,7 @@ class Results:
                     sisteStemmer[kode] = (x, x*ikkeblanke/100)
                 else:
                     x = -(globalNesteKvotient*max(1.4, antall*2-1.) - stemmeantall[kode])
-                    sisteStemmer[kode] = (x/ikkeblanke*100, x)
+                    sisteStemmer[kode] = (x/max(1,ikkeblanke)*100, x)
         return {
             "Oppslutning %": ppabsolutt,
             "Endring %": ppendring,
@@ -474,22 +475,29 @@ def getRoot():
     return getSummary(2021, "st")
 
 def updateRoot():
+    Results.downloadResult("/2021/st")
+    Results.downloadResult("/2017/st")
+    Results.downloadResult("/2019/ko")
+    Results.downloadResult("/2019/fy")
     while True:
-        Results.downloadResult("/2017/st")
-        Results.downloadResult("/2019/ko")
-        Results.downloadResult("/2019/fy")
         Results.downloadResult("/2021/st")
-        time.sleep(50)
+        time.sleep(5)
 
-def createTree():
+def updateTree(depth):
+    #Results.downloadTree("/2021/st", depth=2)
+    #Results.downloadTree("/2019/ko", depth=2)
+    #Results.downloadTree("/2019/fy", depth=2)
+    #Results.downloadTree("/2017/st", depth=2)
     while True:
-        Results.downloadTree("/2019/ko", depth=2, sleep=0)
-        Results.downloadTree("/2019/fy", depth=2)
-        #Results.downloadTree("/2015/ko", depth=2)
-        #Results.downloadTree("/2015/fy", depth=2)
+        Results.downloadResult("/2021/st")
+        Results.downloadTree("/2021/st", depth=depth, sleep=1)
         time.sleep(5)
 
 if __name__ == "__main__":
-    t1 = Thread(target=updateRoot).start()
-    t2 = Thread(target=createTree).start()
-    app.run(host="0.0.0.0", port=1337)
+    parser = argparse.ArgumentParser(description='Presenter data fra valg-apiet.')
+    parser.add_argument('--port', dest='port', type=int, default=1337)
+    parser.add_argument('--depth', dest='depth', type=int, default=2)
+    args = parser.parse_args()
+    #t1 = Thread(target=updateRoot).start()
+    t2 = Thread(target=updateTree, args=(args.depth,)).start()
+    app.run(host="0.0.0.0", port=args.port)
