@@ -490,6 +490,7 @@ def updateTree(depth):
     #Results.downloadTree("/2017/st", depth=2)
     while True:
         Results.downloadResult("/2021/st")
+        Results.downloadTree("/2021/st", depth=2)
         Results.downloadTree("/2021/st", depth=depth, sleep=1)
         time.sleep(5)
 

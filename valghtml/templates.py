@@ -4,6 +4,9 @@ class HTML:
     def html(links, content):
         return '''
         <html>
+        <head>
+        <meta http-equiv="refresh" content="5">
+        </head>
         <body>
         {header}
         <hr>
