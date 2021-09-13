@@ -93,6 +93,7 @@ class Results:
         sperregrense = math.ceil(self.stemmer["total"]/25)
         globalSisteKvotient = 10000000
         globalNesteKvotient = 0
+        ikkeblanke = self.stemmer["total"]
 
         prognose = self.prognose["beregnet"]
         for parti in self.partier:
@@ -100,6 +101,8 @@ class Results:
             kode = parti["id"]["partikode"]
             resultat = parti["stemmer"]["resultat"]
             prosentresultat = resultat["prosent"] or -1
+            if kode == "BLANKE":
+                ikkeblanke -= resultat["antall"]["total"]
             if kategori != 1 and prosentresultat < 1:
                 continue
             opptalt[kode] = self.opptalt["forelopig"]
@@ -161,18 +164,18 @@ class Results:
             else:
                 if prognose:
                     x = globalSisteKvotient*max(1.4, antall*2+1.)-ppprognoseEllerOpptalt[kode]
-                    nesteStemmer[kode] = (x, x*self.stemmer["total"]/100)
+                    nesteStemmer[kode] = (x, x*ikkeblanke/100)
                 else:
                     x = globalSisteKvotient * max(1.4, antall * 2 + 1.) - stemmeantall[kode]
-                    nesteStemmer[kode] = (x/self.stemmer["total"]*100, x)
+                    nesteStemmer[kode] = (x/ikkeblanke*100, x)
             sisteStemmer[kode] = (-1, -1)
             if antall > 0 and not underSperregrensa[kode]:
                 if prognose:
                     x = -(globalNesteKvotient*max(1.4, antall*2-1.)-ppprognoseEllerOpptalt[kode])
-                    sisteStemmer[kode] = (x, x*self.stemmer["total"]/100)
+                    sisteStemmer[kode] = (x, x*ikkeblanke/100)
                 else:
                     x = -(globalNesteKvotient*max(1.4, antall*2-1.) - stemmeantall[kode])
-                    sisteStemmer[kode] = (x/self.stemmer["total"]*100, x)
+                    sisteStemmer[kode] = (x/ikkeblanke*100, x)
         return {
             "Oppslutning %": ppabsolutt,
             "Endring %": ppendring,
