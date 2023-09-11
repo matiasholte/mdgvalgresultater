@@ -28,7 +28,6 @@ class Results:
         self.mandater = results["mandater"]["antall"]
         self.stemmer = results["stemmer"]
         self.opptalt = results["opptalt"]
-        self.prognose = results["prognose"]
         self.partier = results["partier"]
         self.children = results["_links"]["related"]
         self.childrenUpdate = {x["href"]: x["rapportGenerert"] for x in self.children }
@@ -96,7 +95,7 @@ class Results:
         globalNesteKvotient = 0
         ikkeblanke = self.stemmer["total"]
 
-        prognose = self.prognose["beregnet"]
+        prognose = False
         for parti in self.partier:
             kategori = parti["id"]["partikategori"]
             kode = parti["id"]["partikode"]
@@ -201,7 +200,7 @@ class Results:
     def getLink(self):
         return '''
         <table border="1" style="float: left">
-        <tr><th>Navigering</th><th>Alder</th></tr>
+        <tr><th>Navigering</th><th>Alder</th><th>Opptalt</th></tr>
         {up}
         {self}
         {children}
@@ -217,13 +216,18 @@ class Results:
             navn = "<b>{boldname}</b>".format(boldname=navn)
             selv = True
         linkTime = ""
+        opptalt = ""
         try:
             linkTime = link["rapportGenerert"]
+            opptalt = link["forelopig"]
         except KeyError:
             pass
         return '''
-        <tr><td><a href="/results{url}">{name}</a></td><td>{time}</td></tr>
-        '''.format(url=link["href"], name=navn, time=str(toTimeAgo(self.timestamp if selv else linkTime)))
+        <tr><td><a href="/results{url}">{name}</a></td><td>{time}</td><td>{opptalt}</td></tr>
+        '''.format(url=link["href"],
+                   name=navn,
+                   time=str(toTimeAgo(self.timestamp if selv else linkTime)),
+                   opptalt=opptalt)
 
     @staticmethod
     def farge(kode):
@@ -303,6 +307,7 @@ class Results:
     @staticmethod
     def fetchNewest(path):
         try:
+            Results.downloadResult(path)
             result = resultDict[path]
         except KeyError:
             return Results.downloadResult(path)
@@ -363,12 +368,16 @@ def getSummary(year, type):
                      koalisjonsTabell(resultliste["Mandater"]))
 
 def koalisjonsTabell(mandater):
-    return createTable("Koalisjoner",["partier", "mandater"],
-                         [koalisjonsRad(("A", "SV", "SP"), mandater),
-                          koalisjonsRad(("MDG", "A", "SV", "RØDT"), mandater)])
+    return createTable("Koalisjoner",["partier", "mandater", "totalt mandater"],
+                         [koalisjonsRad(("MDG", "V", "H"), mandater),
+                          koalisjonsRad(("MDG", "A", "SV", "RØDT"), mandater),
+                          koalisjonsRad(("MDG", "A", "SV", "V"), mandater),
+                          koalisjonsRad(("MDG", "A", "SV"), mandater),
+                          koalisjonsRad(("MDG", "A", "SV", "SP", "RØDT", "KRF"), mandater),
+                          ])
 def koalisjonsRad(partier, mandater):
     try:
-        return [",".join(partier), sum(mandater[parti] for parti in partier)]
+        return [",".join(partier), sum(mandater[parti] for parti in partier), sum(mandater.values())]
     except KeyError:
         return ["",""]
 
@@ -380,7 +389,9 @@ def getResults(year, type, path):
     if not result:
         abort(404, "Path not found: " + path)
     return HTML.html("Opptalt: " + str(result.opptalt) + " Antall stemmer: " +  str(result.stemmer) + result.getLink(),
-                     str(result.resultatTabellHTML(result.resultatListe())))
+                     str(result.resultatTabellHTML(result.resultatListe())) +
+                     koalisjonsTabell(result.resultatListe()["Mandater"])
+                     )
 
 @app.route('/best/<int:year>/<string:type>')
 def getBest(year, type):
@@ -484,14 +495,11 @@ def updateRoot():
         time.sleep(5)
 
 def updateTree(depth):
-    #Results.downloadTree("/2021/st", depth=2)
-    #Results.downloadTree("/2019/ko", depth=2)
-    #Results.downloadTree("/2019/fy", depth=2)
-    #Results.downloadTree("/2017/st", depth=2)
+    Results.downloadTree("/2023/ko", depth=2)
+    Results.downloadTree("/2023/fy", depth=2)
     while True:
-        Results.downloadResult("/2021/st")
-        Results.downloadTree("/2021/st", depth=2)
-        Results.downloadTree("/2021/st", depth=depth, sleep=1)
+        Results.downloadTree("/2023/ko", depth=1, sleep=1)
+        Results.downloadTree("/2023/fy", depth=1, sleep=1)
         time.sleep(5)
 
 if __name__ == "__main__":
