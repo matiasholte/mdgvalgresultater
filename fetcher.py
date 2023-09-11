@@ -377,7 +377,7 @@ def koalisjonsTabell(mandater):
                           ])
 def koalisjonsRad(partier, mandater):
     try:
-        return [",".join(partier), sum(mandater[parti] for parti in partier), sum(mandater.values())]
+        return [",".join(partier), sum(mandater[parti] for parti in partier), sum(mandater.values())-(mandater.get("Andre",0))]
     except KeyError:
         return ["",""]
 
